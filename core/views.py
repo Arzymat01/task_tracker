@@ -1,58 +1,68 @@
-from rest_framework.views import APIView
+# core/views.py
+
+from rest_framework import generics, permissions
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .serializers import RegisterSerializer, TaskSerializer
+from .models import Task
+from .permissions import IsWorker, IsDispatcher, IsSupervisor
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework import status
 from django.utils import timezone
 
-from .models import Task, User
-from .serializers import TaskSerializer, UserSerializer
-from .permissions import IsWorker, IsDispatcher, IsSupervisor
+User = get_user_model()
+
+# Каттоо (регистрация)
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]
 
 
-# Жумуш баштоо — Worker гана
+# Логин (JWT)
+class LoginView(TokenObtainPairView):
+    serializer_class = TokenObtainPairSerializer
+
+
+# Жумушчу: баштоо
 class StartTaskView(APIView):
-    permission_classes = [IsAuthenticated, IsWorker]
+    permission_classes = [permissions.IsAuthenticated, IsWorker]
 
     def post(self, request):
         task = Task.objects.create(worker=request.user)
-        return Response(TaskSerializer(task).data)
+        return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
 
 
-# Жумушту аяктоо — Worker гана
+# Жумушчу: бүтүрүү
 class EndTaskView(APIView):
-    permission_classes = [IsAuthenticated, IsWorker]
+    permission_classes = [permissions.IsAuthenticated, IsWorker]
 
     def post(self, request):
-        try:
-            task = Task.objects.filter(worker=request.user, is_completed=False).latest('start_time')
+        task = Task.objects.filter(worker=request.user, end_time__isnull=True).last()
+        if task:
             task.end_time = timezone.now()
             task.is_completed = True
             task.save()
             return Response(TaskSerializer(task).data)
-        except Task.DoesNotExist:
-            return Response({"error": "Активдүү жумуш табылган жок."}, status=404)
+        return Response({"detail": "Активдүү тапшырма жок."}, status=400)
 
 
-# Диспетчер өз жумушчуларынын бардык жумуштарын көрөт
+# Диспетчер: өз жумушчуларынын тапшырмалары
 class DispatcherWorkerTasksView(APIView):
-    permission_classes = [IsAuthenticated, IsDispatcher]
+    permission_classes = [permissions.IsAuthenticated, IsDispatcher]
 
     def get(self, request):
         workers = User.objects.filter(assigned_dispatcher=request.user)
-        tasks = Task.objects.filter(worker__in=workers).order_by('-start_time')
+        tasks = Task.objects.filter(worker__in=workers)
         return Response(TaskSerializer(tasks, many=True).data)
 
 
-# Супервайзер бардык жумуштарды көрөт
-class AllTasksView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsSupervisor]
-    queryset = Task.objects.all().order_by('-start_time')
-    serializer_class = TaskSerializer
-
-
-# Өзү жөнүндө маалымат алуу
-class MeView(APIView):
-    permission_classes = [IsAuthenticated]
+# Супервайзер: бардык тапшырмаларды көрүү
+class AllTasksView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsSupervisor]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        tasks = Task.objects.all()
+        return Response(TaskSerializer(tasks, many=True).data)
