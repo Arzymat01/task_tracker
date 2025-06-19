@@ -5,6 +5,7 @@ from django.urls import path, include
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from django.http import HttpResponse
 from django.http import JsonResponse
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -12,7 +13,17 @@ from rest_framework_simplejwt.views import (
 
 )
 def home(request):
-    return JsonResponse({"message": "Welcome to Doctor Consultant API!"})
+    html_content = """
+    <html>
+        <head><title>TASK TRACKER API</title></head>
+        <body style="font-family: Arial; background-color: #f2f2f2; padding: 50px;">
+            <h1 style="color: #2c3e50;">Welcome to <span style="color: #3498db;">TASK TRACKER API</span>!</h1>
+            <p style="font-size: 18px;">TASK TRACKER</p>
+            <p><a href="/swagger/" style="color: #2980b9;">Swagger документациясына өтүү</a></p>
+        </body>
+    </html>
+    """
+    return HttpResponse(html_content)
 
 schema_view = get_schema_view(
    openapi.Info(
